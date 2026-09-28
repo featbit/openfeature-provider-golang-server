@@ -166,6 +166,61 @@ func TestInvalidFloatResults(t *testing.T) {
 	}
 }
 
+func TestSuccessfulEvaluationsCallSDKOnce(t *testing.T) {
+	ec := openfeature.FlattenedContext{openfeature.TargetingKey: "user"}
+	t.Run("boolean", func(t *testing.T) {
+		checkSingleEvaluation(t, &stubClient{text: "true"}, func(p *Provider) openfeature.BoolResolutionDetail {
+			return p.BooleanEvaluation(t.Context(), "flag", false, ec)
+		}, true)
+	})
+	t.Run("string", func(t *testing.T) {
+		checkSingleEvaluation(t, &stubClient{text: "resolved"}, func(p *Provider) openfeature.StringResolutionDetail {
+			return p.StringEvaluation(t.Context(), "flag", "fallback", ec)
+		}, "resolved")
+	})
+	t.Run("integer", func(t *testing.T) {
+		checkSingleEvaluation(t, &stubClient{text: "9007199254740993.0"}, func(p *Provider) openfeature.IntResolutionDetail {
+			return p.IntEvaluation(t.Context(), "flag", -1, ec)
+		}, int64(9007199254740993))
+	})
+	t.Run("float", func(t *testing.T) {
+		checkSingleEvaluation(t, &stubClient{number: 2.5}, func(p *Provider) openfeature.FloatResolutionDetail {
+			return p.FloatEvaluation(t.Context(), "flag", -1, ec)
+		}, 2.5)
+	})
+	t.Run("object", func(t *testing.T) {
+		checkSingleEvaluation(t, &stubClient{object: json.RawMessage(`{"enabled":true}`)}, func(p *Provider) openfeature.InterfaceResolutionDetail {
+			return p.ObjectEvaluation(t.Context(), "flag", nil, ec)
+		}, any(map[string]any{"enabled": true}))
+	})
+}
+
+func checkSingleEvaluation[T any](t *testing.T, client *stubClient, evaluate func(*Provider) openfeature.GenericResolutionDetail[T], want T) {
+	t.Helper()
+	client.initialized = true
+	client.detail.Reason = sdk.ReasonTargetMatch
+	result := evaluate(&Provider{client: client})
+	if result.Error() != nil || result.Reason != openfeature.TargetingMatchReason || !reflect.DeepEqual(result.Value, want) {
+		t.Fatalf("result=%+v, want value=%#v and TARGETING_MATCH", result, want)
+	}
+	if client.calls != 1 {
+		t.Fatalf("SDK calls=%d; each evaluation must record analytics only once", client.calls)
+	}
+}
+
+func TestBooleanEvaluationRejectsCoercion(t *testing.T) {
+	for _, raw := range []string{"1", "0", "TRUE", "False", "null", ""} {
+		t.Run(raw, func(t *testing.T) {
+			client := &stubClient{initialized: true, text: raw}
+			p := &Provider{client: client}
+			result := p.BooleanEvaluation(t.Context(), "flag", true, openfeature.FlattenedContext{openfeature.TargetingKey: "user"})
+			if !result.Value || result.ResolutionDetail().ErrorCode != openfeature.TypeMismatchCode || client.calls != 1 {
+				t.Fatalf("result=%+v, SDK calls=%d; want default and TYPE_MISMATCH", result, client.calls)
+			}
+		})
+	}
+}
+
 func TestJSONConversion(t *testing.T) {
 	type fallback struct{ Name string }
 	defaultValue := &fallback{Name: "unchanged"}

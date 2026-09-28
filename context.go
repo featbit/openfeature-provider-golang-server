@@ -1,7 +1,6 @@
 package featbit
 
 import (
-	"math"
 	"strconv"
 	"strings"
 
@@ -83,11 +82,11 @@ func scalarString(value any) (string, bool) {
 	case uint64:
 		return strconv.FormatUint(value, 10), true
 	case float32:
-		if !math.IsNaN(float64(value)) && !math.IsInf(float64(value), 0) {
+		if isFinite(float64(value)) {
 			return strconv.FormatFloat(float64(value), 'g', -1, 32), true
 		}
 	case float64:
-		if !math.IsNaN(value) && !math.IsInf(value, 0) {
+		if isFinite(value) {
 			return strconv.FormatFloat(value, 'g', -1, 64), true
 		}
 	}

@@ -17,7 +17,7 @@ func parseInt64(raw string) (int64, bool) {
 		return 0, false
 	}
 	estimate, err := strconv.ParseFloat(raw, 64)
-	if err != nil || math.IsInf(estimate, 0) || math.IsNaN(estimate) || math.Abs(estimate) > math.Exp2(63) {
+	if err != nil || !isFinite(estimate) || math.Abs(estimate) > math.Exp2(63) {
 		return 0, false
 	}
 	if estimate == 0 {

@@ -1,6 +1,7 @@
 package featbit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -8,6 +9,44 @@ import (
 	"github.com/featbit/featbit-go-sdk/interfaces"
 	"github.com/open-feature/go-sdk/openfeature"
 )
+
+// resolve keeps validation, SDK errors, conversion errors and defaults consistent
+// across evaluation types. The client is accessed only after readiness checks.
+func resolve[T, R any](p *Provider, ctx context.Context, defaultValue T, flatCtx openfeature.FlattenedContext,
+	evaluate func(evaluationClient, interfaces.FBUser) (R, interfaces.EvalDetail, error),
+	convert func(R) (T, openfeature.ResolutionError),
+) openfeature.GenericResolutionDetail[T] {
+	result := openfeature.GenericResolutionDetail[T]{Value: defaultValue}
+	if ctx == nil || ctx.Err() != nil {
+		result.ProviderResolutionDetail = errorDetails(openfeature.NewGeneralResolutionError("evaluation context is canceled or unavailable"))
+		return result
+	}
+	if !p.ready() {
+		result.ProviderResolutionDetail = errorDetails(openfeature.NewProviderNotReadyResolutionError("FeatBit client is not ready"))
+		return result
+	}
+	user, contextErr := evaluationUser(flatCtx)
+	if contextErr != (openfeature.ResolutionError{}) {
+		result.ProviderResolutionDetail = errorDetails(contextErr)
+		return result
+	}
+	raw, detail, err := evaluate(p.client, user)
+	result.ProviderResolutionDetail = resolutionDetails(detail, err)
+	if result.Reason == openfeature.ErrorReason {
+		return result
+	}
+	value, conversionErr := convert(raw)
+	if conversionErr != (openfeature.ResolutionError{}) {
+		result.ProviderResolutionDetail = errorDetails(conversionErr)
+		return result
+	}
+	result.Value = value
+	return result
+}
+
+func typeMismatch() openfeature.ResolutionError {
+	return openfeature.NewTypeMismatchResolutionError("flag value does not match the requested type")
+}
 
 func errorDetails(err openfeature.ResolutionError) openfeature.ProviderResolutionDetail {
 	return openfeature.ProviderResolutionDetail{
@@ -24,20 +63,18 @@ func resolutionDetails(detail interfaces.EvalDetail, err error) openfeature.Prov
 	case sdk.ReasonFlagNotFound:
 		return errorDetails(openfeature.NewFlagNotFoundResolutionError("flag was not found"))
 	case sdk.ReasonWrongType:
-		return errorDetails(openfeature.NewTypeMismatchResolutionError("flag value does not match the requested type"))
+		return errorDetails(typeMismatch())
 	case sdk.ReasonUserNotSpecified:
 		return errorDetails(openfeature.NewInvalidContextResolutionError("FeatBit user is invalid"))
 	case sdk.ReasonError:
 		return errorDetails(openfeature.NewGeneralResolutionError("FeatBit evaluation failed"))
 	}
 	if err != nil {
-		var syntaxError *json.SyntaxError
-		if errors.As(err, &syntaxError) {
+		if _, ok := errors.AsType[*json.SyntaxError](err); ok {
 			return errorDetails(openfeature.NewParseErrorResolutionError("flag value is not valid JSON"))
 		}
-		var typeError *json.UnmarshalTypeError
-		if errors.As(err, &typeError) {
-			return errorDetails(openfeature.NewTypeMismatchResolutionError("flag value does not match the requested type"))
+		if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+			return errorDetails(typeMismatch())
 		}
 		return errorDetails(openfeature.NewGeneralResolutionError("FeatBit evaluation failed"))
 	}
