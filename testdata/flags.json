@@ -1,0 +1,111 @@
+{
+  "messageType": "data-sync",
+  "data": {
+    "eventType": "full",
+    "featureFlags": [
+      {
+        "key": "boolean", "name": "Boolean", "variationType": "boolean", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "on", "value": "true"}, {"id": "off", "value": "false"}],
+        "targetUsers": [{"keyIds": ["excluded-workload"], "variationId": "off"}],
+        "fallthrough": {"variations": [{"id": "on", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "string", "name": "String", "variationType": "string", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "basic", "value": "basic"}, {"id": "premium", "value": "premium"}, {"id": "targeted", "value": "targeted"}],
+        "targetUsers": [{"keyIds": ["targeted-workload"], "variationId": "targeted"}],
+        "rules": [{
+          "conditions": [
+            {"property": "tenant", "op": "Equal", "value": "paid"},
+            {"property": "seats", "op": "Equal", "value": "3"},
+            {"property": "enabled", "op": "Equal", "value": "true"},
+            {"property": "ratio", "op": "Equal", "value": "1.5"},
+            {"property": "name", "op": "Equal", "value": "service-a"}
+          ],
+          "variations": [{"id": "premium", "rollout": [0, 1]}]
+        }],
+        "fallthrough": {"variations": [{"id": "basic", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer", "name": "Integer", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "answer", "value": "42"}],
+        "fallthrough": {"variations": [{"id": "answer", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "float", "name": "Float", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "ratio", "value": "2.5"}],
+        "fallthrough": {"variations": [{"id": "ratio", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "object", "name": "Object", "variationType": "json", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "config", "value": "{\"limits\":{\"requests\":12},\"regions\":[\"eu\",\"us\"],\"enabled\":true,\"optional\":null}"}],
+        "fallthrough": {"variations": [{"id": "config", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "array", "name": "Array", "variationType": "json", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "config", "value": "[\"eu\",{\"weight\":2},null]"}],
+        "fallthrough": {"variations": [{"id": "config", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "disabled", "name": "Disabled", "variationType": "boolean", "isEnabled": false, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "off", "value": "false"}],
+        "disabledVariationId": "off"
+      },
+      {
+        "key": "unknown-type", "name": "Unknown type", "variationType": "unsupported", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "value", "value": "unsupported"}],
+        "fallthrough": {"variations": [{"id": "value", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "invalid-json", "name": "Invalid JSON", "variationType": "json", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "invalid", "value": "{not-json}"}],
+        "fallthrough": {"variations": [{"id": "invalid", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "json-null", "name": "JSON null", "variationType": "json", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "null", "value": "null"}],
+        "fallthrough": {"variations": [{"id": "null", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "json-scalar", "name": "JSON scalar", "variationType": "json", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "scalar", "value": "true"}],
+        "fallthrough": {"variations": [{"id": "scalar", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-precision", "name": "Integer precision", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "exact", "value": "9007199254740993"}],
+        "fallthrough": {"variations": [{"id": "exact", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-max", "name": "Integer max", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "max", "value": "9223372036854775807"}],
+        "fallthrough": {"variations": [{"id": "max", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-min", "name": "Integer min", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "min", "value": "-9223372036854775808"}],
+        "fallthrough": {"variations": [{"id": "min", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-decimal", "name": "Integer decimal", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "decimal", "value": "42.0"}],
+        "fallthrough": {"variations": [{"id": "decimal", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-exponent", "name": "Integer exponent", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "exponent", "value": "42e0"}],
+        "fallthrough": {"variations": [{"id": "exponent", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-overflow", "name": "Integer overflow", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "overflow", "value": "9223372036854775808"}],
+        "fallthrough": {"variations": [{"id": "overflow", "rollout": [0, 1]}]}
+      },
+      {
+        "key": "integer-underflow", "name": "Integer underflow", "variationType": "number", "isEnabled": true, "updatedAt": "2024-01-01T00:00:00Z",
+        "variations": [{"id": "underflow", "value": "-9223372036854775809"}],
+        "fallthrough": {"variations": [{"id": "underflow", "rollout": [0, 1]}]}
+      }
+    ],
+    "segments": []
+  }
+}

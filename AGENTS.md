@@ -52,9 +52,9 @@
 
 | OpenFeature evaluation | FeatBit method |
 | --- | --- |
-| Boolean | `BoolVariation` |
+| Boolean | `Variation` with boolean validation |
 | String | `Variation` |
-| Integer | `IntVariation` |
+| Integer | `Variation` with exact `int64` parsing |
 | Float | `DoubleVariation` |
 | Object | `JsonVariation` |
 
@@ -68,8 +68,8 @@
 - Inspect both the SDK error and evaluation detail; a fallback value alone does not indicate success.
 - Map known success reasons explicitly; use `UNKNOWN` when the SDK provides insufficient detail.
 - Populate `Variant` only from an actual variation identifier, never from the evaluated value.
-- Check conversions between OpenFeature `int64` and FeatBit `int`; never silently overflow or truncate.
-- Preserve JSON structure and document object conversion behavior; never mutate object defaults.
+- Validate raw boolean and integer variations; avoid the SDK's numeric-to-boolean coercion and float-to-int truncation.
+- Decode JSON through a nonnil `json.RawMessage` default, support objects and arrays, and preserve caller defaults on errors.
 - Keep secrets and evaluation-context contents out of error messages and logs.
 
 ## Validation
