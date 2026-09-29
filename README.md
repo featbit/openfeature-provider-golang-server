@@ -105,3 +105,7 @@ Create one FeatBit client and provider per environment at startup, then share th
 Drain requests before shutting down OpenFeature, then call `fbClient.Close()`. OpenFeature shutdown does not close the application-owned FeatBit client.
 
 See the [HTTP server example](examples/basic/) for configuration, request-scoped evaluation, defaults, and graceful shutdown.
+
+## Advanced configuration
+
+For log levels, proxy/TLS settings, offline mode, and other client options, see the [FeatBit Go SDK](https://github.com/featbit/featbit-go-sdk). Set `FBConfig` options when calling `MakeCustomFBClient`, then pass the initialized client to `NewProvider`.
