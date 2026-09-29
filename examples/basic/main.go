@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 	"github.com/open-feature/go-sdk/openfeature"
 	"github.com/open-feature/go-sdk/openfeature/isolated"
 )
+
+//go:embed watch.html
+var watchPage []byte
 
 func main() {
 	if err := run(); err != nil {
@@ -38,7 +42,7 @@ func run() (err error) {
 		os.Getenv("FEATBIT_ENV_SECRET"),
 		os.Getenv("FEATBIT_STREAMING_URL"),
 		os.Getenv("FEATBIT_EVENT_URL"),
-		featbitsdk.FBConfig{StartWait: 10 * time.Second},
+		featbitsdk.FBConfig{StartWait: 10 * time.Second, LogLevel: featbitsdk.WARN},
 	)
 	// The SDK may return a client even when initialization fails.
 	if fbClient != nil {
@@ -62,11 +66,26 @@ func run() (err error) {
 	app := &application{
 		flags:        api.NewClient(),
 		targetingKey: os.Getenv("SERVICE_TARGETING_KEY"),
+		flagKey:      os.Getenv("FEATBIT_FLAG_KEY"),
+	}
+	if app.flagKey == "" {
+		app.flagKey = "my-feature"
+	}
+	addr := os.Getenv("LISTEN_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:8080"
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		if _, err := w.Write(watchPage); err != nil {
+			log.Print("Could not write live view")
+		}
+	})
 	mux.HandleFunc("GET /feature", app.feature)
 	server := &http.Server{
-		Addr:              ":8080",
+		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
@@ -78,7 +97,7 @@ func run() (err error) {
 	defer stop()
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
-	log.Print("Listening on :8080; GET /feature evaluates my-feature")
+	log.Printf("Live view: http://%s/; GET /feature evaluates %s", addr, app.flagKey)
 
 	var serveErr error
 	select {
@@ -103,6 +122,7 @@ func run() (err error) {
 type application struct {
 	flags        *openfeature.Client
 	targetingKey string
+	flagKey      string
 }
 
 func (app *application) feature(w http.ResponseWriter, r *http.Request) {
@@ -111,12 +131,19 @@ func (app *application) feature(w http.ResponseWriter, r *http.Request) {
 		"method": r.Method,
 		"route":  "/feature",
 	})
-	enabled, err := app.flags.BooleanValue(r.Context(), "my-feature", false, evaluationContext)
+	details, err := app.flags.BooleanValueDetails(r.Context(), app.flagKey, false, evaluationContext)
 	if err != nil {
 		log.Print("Flag evaluation failed; using the default value")
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled}); err != nil {
+	w.Header().Set("Cache-Control", "no-store")
+	response := struct {
+		FlagKey   string                `json:"flagKey"`
+		Enabled   bool                  `json:"enabled"`
+		Reason    openfeature.Reason    `json:"reason"`
+		ErrorCode openfeature.ErrorCode `json:"errorCode,omitempty"`
+	}{app.flagKey, details.Value, details.Reason, details.ErrorCode}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Print("Could not write response")
 	}
 }

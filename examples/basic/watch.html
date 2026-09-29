@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FeatBit live flag test</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #17212b; background: #f3f5f7; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 48px 20px; }
+    main { max-width: 720px; margin: auto; }
+    header { margin-bottom: 28px; }
+    h1 { margin: 0 0 10px; font-size: 28px; letter-spacing: -.6px; }
+    p { color: #586573; line-height: 1.6; margin: 0; }
+    .card { background: white; padding: 28px; border: 1px solid #dce2e8; border-radius: 16px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    #flag { font: 600 16px ui-monospace, monospace; overflow-wrap: anywhere; }
+    #status { font-size: 13px; color: #586573; background: #edf0f3; padding: 6px 10px; border-radius: 6px; }
+    #value { font: 700 clamp(64px, 15vw, 100px) ui-monospace, monospace; margin: 28px 0 16px; letter-spacing: -5px; }
+    .card[data-state="true"] #value { color: #167343; }
+    .card[data-state="false"] #value { color: #465567; }
+    .card[data-state="error"] #value, .card[data-state="error"] #status { color: #9b4910; }
+    #notice { min-height: 26px; margin-bottom: 20px; }
+    dl { display: grid; grid-template-columns: 140px 1fr; gap: 10px; font-size: 14px; margin: 0; }
+    dt { color: #586573; }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    h2 { font-size: 16px; margin: 30px 0 12px; }
+    ol { list-style: none; padding: 0; margin: 0; }
+    li { padding: 12px 0; border-bottom: 1px solid #dce2e8; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+    li time { color: #586573; margin-right: 12px; font-variant-numeric: tabular-nums; }
+    #empty { font-size: 14px; }
+    footer { font-size: 12px; color: #586573; margin-top: 22px; }
+    @media (max-width: 480px) { body { padding: 28px 16px; } .card { padding: 22px; } dl { grid-template-columns: 110px 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>FeatBit live flag test</h1>
+      <p>Change this flag in the FeatBit UI and save. This page evaluates it every second.</p>
+    </header>
+    <section class="card" id="card" data-state="waiting" aria-label="Current evaluation">
+      <div class="top"><span id="flag">Waiting for flag…</span><span id="status" role="status">Connecting</span></div>
+      <div id="value" aria-live="polite">—</div>
+      <p id="notice">Waiting for the first evaluation.</p>
+      <dl>
+        <dt>Reason</dt><dd id="reason">—</dd>
+        <dt>Last evaluated</dt><dd id="updated">—</dd>
+      </dl>
+    </section>
+    <h2>Recent changes</h2>
+    <p id="empty">Value, reason, and error changes will appear here.</p>
+    <ol id="history" aria-label="Recent flag changes"></ol>
+    <footer>Shows the latest 15 changes. Evaluation errors display the default value with an error status.</footer>
+  </main>
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const card = byId('card');
+    let previous = '';
+
+    function record(signature, message, now) {
+      if (signature === previous) return;
+      previous = signature;
+      byId('empty').hidden = true;
+      const item = document.createElement('li');
+      const time = document.createElement('time');
+      time.dateTime = now.toISOString();
+      time.textContent = now.toLocaleTimeString();
+      item.append(time, document.createTextNode(message));
+      const history = byId('history');
+      history.prepend(item);
+      while (history.children.length > 15) history.lastElementChild.remove();
+    }
+
+    async function refresh() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch('/feature', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const result = await response.json();
+        if (typeof result.flagKey !== 'string' || typeof result.enabled !== 'boolean' || typeof result.reason !== 'string') {
+          throw new Error('Unexpected response');
+        }
+        const now = new Date();
+        const error = result.errorCode || '';
+        card.dataset.state = error ? 'error' : String(result.enabled);
+        byId('flag').textContent = result.flagKey;
+        byId('value').textContent = String(result.enabled);
+        byId('status').textContent = error ? 'Evaluation error · ' + error : 'Receiving evaluations';
+        byId('notice').textContent = error ? 'This is the default value because evaluation failed.' : 'Save your flag changes in FeatBit to see the result here.';
+        byId('reason').textContent = result.reason || 'UNKNOWN';
+        byId('updated').textContent = now.toLocaleTimeString();
+        record(JSON.stringify([result.flagKey, result.enabled, result.reason, error]),
+          String(result.enabled) + (error ? ' (default) · ' + error : '') + ' · ' + (result.reason || 'UNKNOWN'), now);
+      } catch (error) {
+        const message = error.name === 'AbortError' ? 'Request timed out' : error.message;
+        card.dataset.state = 'error';
+        byId('value').textContent = '—';
+        byId('status').textContent = 'Connection error';
+        byId('notice').textContent = message + '. Retrying automatically.';
+        byId('reason').textContent = 'Unavailable';
+        record('connection:' + message, 'Connection error · ' + message, new Date());
+      } finally {
+        clearTimeout(timeout);
+        setTimeout(refresh, 1000);
+      }
+    }
+    refresh();
+  </script>
+</body>
+</html>
