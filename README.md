@@ -67,16 +67,27 @@ func run() (err error) {
 		"userName": "Alice",
 		"plan":     "premium",
 	})
-	enabled, evaluationErr := client.BooleanValue(context.Background(), "my-feature", false, evaluationContext)
-	if evaluationErr != nil {
-		log.Print("Flag evaluation failed; using the default value")
+	ctx := context.Background()
+	enabled, boolErr := client.BooleanValue(ctx, "my-feature", false, evaluationContext)
+	message, stringErr := client.StringValue(ctx, "welcome-message", "Hello", evaluationContext)
+	limit, intErr := client.IntValue(ctx, "request-limit", int64(100), evaluationContext)
+	sampleRate, floatErr := client.FloatValue(ctx, "sampling-rate", 0.1, evaluationContext)
+	settings, objectErr := client.ObjectValue(ctx, "settings", map[string]any{
+		"theme": "light",
+	}, evaluationContext)
+	if evaluationErr := errors.Join(boolErr, stringErr, intErr, floatErr, objectErr); evaluationErr != nil {
+		log.Print("Some flag evaluations failed; using their default values")
 	}
 	fmt.Println("Feature enabled:", enabled)
+	fmt.Println("Message:", message)
+	fmt.Println("Request limit:", limit)
+	fmt.Println("Sampling rate:", sampleRate)
+	fmt.Println("Settings:", settings)
 	return nil
 }
 ```
 
-Use `BooleanValue`, `StringValue`, `IntValue`, `FloatValue`, and `ObjectValue` for the five supported value types. Their `*ValueDetails` methods also return evaluation details.
+Replace the example flag keys with flags from your environment. Each call returns its supplied default if evaluation fails. The corresponding `*ValueDetails` methods also return evaluation details.
 
 ## Evaluation context
 
