@@ -96,10 +96,6 @@ Replace the example flag keys with flags from your environment. Each call return
 - Custom attributes accept strings, booleans, and numbers, converted to strings for targeting. Nested values and `nil` are rejected. Identity aliases `key`, `keyid`, and `name` are reserved (case-insensitive).
 - `ObjectValue` accepts JSON object and array flags. Results use `map[string]any` and `[]any`, with numbers decoded as `float64`. Evaluation errors return the supplied default unchanged, including a `nil` default.
 
-## Known limitations
-
-The provider validates converted values but does not enforce the original FeatBit flag type in every case. Some cross-type reads can succeed, such as reading a boolean or JSON flag as a string, or reading a JSON scalar `true` as a boolean. Use the evaluation method matching the configured flag type; do not rely on `TYPE_MISMATCH` to detect every incorrect call.
-
 ## Server applications
 
 Create one FeatBit client and provider per environment at startup, then share the OpenFeature client with handlers and services. Supply request and tenant attributes on each evaluation. Use separate isolated API instances or OpenFeature domains for different environments.
