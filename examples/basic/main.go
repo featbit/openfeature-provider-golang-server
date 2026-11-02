@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	featbitsdk "github.com/featbit/featbit-go-sdk"
-	featbitprovider "github.com/featbit/openfeature-provider-golang-server"
+	featbitsdk "github.com/featbit/featbit-go-sdk/v2"
+	featbitprovider "github.com/featbit/openfeature-provider-golang-server/v2"
 	"github.com/open-feature/go-sdk/openfeature"
 	"github.com/open-feature/go-sdk/openfeature/isolated"
 )

@@ -4,10 +4,10 @@ Use [FeatBit](https://www.featbit.co/) feature flags in Go server applications w
 
 ## Installation
 
-Requires Go 1.26 or later.
+Requires Go 1.26 or later and FeatBit Go SDK v2.1.0 (`github.com/featbit/featbit-go-sdk/v2`).
 
 ```sh
-go get github.com/featbit/openfeature-provider-golang-server
+go get github.com/featbit/openfeature-provider-golang-server/v2@v2.1.0
 ```
 
 ## Quick start
@@ -25,8 +25,8 @@ import (
 	"os"
 	"time"
 
-	featbitsdk "github.com/featbit/featbit-go-sdk"
-	featbitprovider "github.com/featbit/openfeature-provider-golang-server"
+	featbitsdk "github.com/featbit/featbit-go-sdk/v2"
+	featbitprovider "github.com/featbit/openfeature-provider-golang-server/v2"
 	"github.com/open-feature/go-sdk/openfeature"
 	"github.com/open-feature/go-sdk/openfeature/isolated"
 )
@@ -43,7 +43,7 @@ func run() (err error) {
 		os.Getenv("FEATBIT_ENV_SECRET"),
 		os.Getenv("FEATBIT_STREAMING_URL"),
 		os.Getenv("FEATBIT_EVENT_URL"),
-		featbitsdk.FBConfig{StartWait: 10 * time.Second},
+		featbitsdk.FBConfig{StartWait: 10 * time.Second, LogLevel: featbitsdk.WARN},
 	)
 	if fbClient != nil {
 		defer func() { err = errors.Join(err, fbClient.Close()) }()
@@ -95,6 +95,10 @@ Replace the example flag keys with flags from your environment. Each call return
 - An omitted or empty `userName` defaults to the targeting key.
 - Custom attributes accept strings, booleans, and numbers, converted to strings for targeting. Nested values and `nil` are rejected. Identity aliases `key`, `keyid`, and `name` are reserved (case-insensitive).
 - `ObjectValue` accepts JSON object and array flags. Results use `map[string]any` and `[]any`, with numbers decoded as `float64`. Evaluation errors return the supplied default unchanged, including a `nil` default.
+
+## Known limitations
+
+The provider validates converted values but does not enforce the original FeatBit flag type in every case. Some cross-type reads can succeed, such as reading a boolean or JSON flag as a string, or reading a JSON scalar `true` as a boolean. Use the evaluation method matching the configured flag type; do not rely on `TYPE_MISMATCH` to detect every incorrect call.
 
 ## Server applications
 
