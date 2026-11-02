@@ -13,11 +13,11 @@
 | Component | Version / path |
 | --- | --- |
 | Go | Minimum `1.26.0`; use the latest patch in CI |
-| FeatBit SDK | [`github.com/featbit/featbit-go-sdk`](https://pkg.go.dev/github.com/featbit/featbit-go-sdk@v1.1.3) `v1.1.3` |
+| FeatBit SDK | [`github.com/featbit/featbit-go-sdk/v2`](https://pkg.go.dev/github.com/featbit/featbit-go-sdk/v2@v2.1.0) `v2.1.0` |
 | OpenFeature SDK | [`github.com/open-feature/go-sdk`](https://github.com/open-feature/go-sdk/blob/v1.19.0/go.mod) `v1.19.0` |
-| Provider module | `github.com/featbit/openfeature-provider-golang-server` |
+| Provider module | `github.com/featbit/openfeature-provider-golang-server/v2` |
 | Provider package | `featbit` at the repository root |
-| First release | `v0.1.0` |
+| First release | `v2.1.0` |
 
 - Import OpenFeature from `github.com/open-feature/go-sdk/openfeature`.
 - Pin dependency versions in `go.mod` and commit `go.sum`; avoid branch dependencies and local `replace` directives in releases.
@@ -86,12 +86,11 @@
 - Maintain source and releases in `featbit/openfeature-provider-golang-server` on GitHub.
 - Develop through focused pull requests into `main`; require passing CI before merging.
 - Version the provider independently of both upstream SDKs using Semantic Versioning.
-- During `v0.x`, use minor releases for breaking changes and features, and patch releases for compatible fixes.
-- Publish `v1.0.0` once the public API, context mapping, lifecycle, and error behavior are stable and tested.
-- After `v1.0.0`, use patch/minor/major releases for fixes/compatible features/breaking changes; add `/v2` to the module and imports for major version 2.
+- Use patch/minor/major releases for compatible fixes, compatible features, and breaking changes respectively.
+- The provider uses the `/v2` module and import paths. A future major version 3 must use `/v3`.
 - Record user-visible changes and dependency compatibility in `CHANGELOG.md` and GitHub release notes.
-- Release a tested commit with an immutable root tag such as `v0.1.0` and a matching GitHub Release; never move a published tag.
-- Distribute through Go Modules: `go get github.com/featbit/openfeature-provider-golang-server@v0.1.0`.
+- Release a tested commit with an immutable root tag such as `v2.1.0` and a matching GitHub Release; never move a published tag.
+- Distribute through Go Modules: `go get github.com/featbit/openfeature-provider-golang-server/v2@v2.1.0`.
 - Follow the [Go module publishing workflow](https://go.dev/doc/modules/publishing); verify proxy resolution and documentation on pkg.go.dev after tagging.
 - Include a license, package documentation, and a working quick-start example before the first release.
 - Submit the released provider to the OpenFeature ecosystem listing; keep this repository as the canonical distribution source.

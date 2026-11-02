@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/featbit/featbit-go-sdk"
-	"github.com/featbit/featbit-go-sdk/factories"
-	"github.com/featbit/featbit-go-sdk/interfaces"
-	featbit "github.com/featbit/openfeature-provider-golang-server"
+	sdk "github.com/featbit/featbit-go-sdk/v2"
+	"github.com/featbit/featbit-go-sdk/v2/factories"
+	"github.com/featbit/featbit-go-sdk/v2/interfaces"
+	featbit "github.com/featbit/openfeature-provider-golang-server/v2"
 	"github.com/open-feature/go-sdk/openfeature"
 	"github.com/open-feature/go-sdk/openfeature/isolated"
 )

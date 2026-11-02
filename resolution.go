@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	sdk "github.com/featbit/featbit-go-sdk"
-	"github.com/featbit/featbit-go-sdk/interfaces"
+	sdk "github.com/featbit/featbit-go-sdk/v2"
+	"github.com/featbit/featbit-go-sdk/v2/interfaces"
 	"github.com/open-feature/go-sdk/openfeature"
 )
 
