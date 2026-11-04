@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.1.1 - 2026-11-04
+
+### Changes
+
+- Upgrade FeatBit Go SDK from v2.1.0 to v2.1.1.
+- Inherit the SDK's removal of `sendToExperiment` from evaluation event payloads and SDK-side experiment eligibility calculations and configuration fields.
+- Flag evaluation, percentage rollouts, and `insightsEnabled` controls remain supported; the provider's public API is unchanged.
+
+### Compatibility
+
+- Require Go 1.26 or later, FeatBit Go SDK v2.1.1, and OpenFeature Go SDK v1.19.0.
+- Continue using the `github.com/featbit/openfeature-provider-golang-server/v2` module and import path.
+
 ## v2.1.0 - 2026-11-02
 
 First public release of the FeatBit server-side OpenFeature provider.

@@ -1,5 +1,5 @@
-github.com/featbit/featbit-go-sdk/v2 v2.1.0 h1:h9CDYPhjNx2ixcHv+eIpnjzSgGeWk00uktGbAiFf/OY=
-github.com/featbit/featbit-go-sdk/v2 v2.1.0/go.mod h1:EXWDuThiAc0RGYLoimjqNqWM3TlXSVtZCPXWI9nEdFc=
+github.com/featbit/featbit-go-sdk/v2 v2.1.1 h1:UFsxfC5FriNPShtoekyHx8ivrtYtPSykqwZRf/2e7UE=
+github.com/featbit/featbit-go-sdk/v2 v2.1.1/go.mod h1:EXWDuThiAc0RGYLoimjqNqWM3TlXSVtZCPXWI9nEdFc=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/gorilla/websocket v1.5.0 h1:PPwGk2jz7EePpoHN/+ClbZu8SPxiqlu12wZP/3sWmnc=
