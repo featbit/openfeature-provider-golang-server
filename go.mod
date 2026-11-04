@@ -3,7 +3,7 @@ module github.com/featbit/openfeature-provider-golang-server/v2
 go 1.26.0
 
 require (
-	github.com/featbit/featbit-go-sdk/v2 v2.1.0
+	github.com/featbit/featbit-go-sdk/v2 v2.1.1
 	github.com/open-feature/go-sdk v1.19.0
 )
 
