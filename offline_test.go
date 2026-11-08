@@ -39,20 +39,17 @@ func newOfflineClient(t *testing.T, transform func(string) string, storageFactor
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Error(err)
-		}
-	})
 	if ok, err := client.InitializeFromExternalJson(fixture); err != nil || !ok {
 		t.Fatalf("initialize fixture: ok=%v, err=%v", ok, err)
 	}
 	return client
 }
 
-func registerOfflineProvider(t *testing.T, sdkClient *sdk.FBClient) (*openfeature.Client, *openfeature.EvaluationAPI, *featbit.Provider) {
+// registerOfflineProvider registers a provider that owns sdkClient by default,
+// so API shutdown during cleanup also closes the client.
+func registerOfflineProvider(t *testing.T, sdkClient *sdk.FBClient, opts ...featbit.Option) (*openfeature.Client, *openfeature.EvaluationAPI, *featbit.Provider) {
 	t.Helper()
-	provider, err := featbit.NewProvider(sdkClient)
+	provider, err := featbit.NewProvider(sdkClient, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,13 +313,21 @@ func TestOfflineTargetingAndContextIsolation(t *testing.T) {
 }
 
 func TestOfflineProviderIsolationAndClientOwnership(t *testing.T) {
-	storage := &closeTrackingStorage{}
-	first := newOfflineClient(t, nil, storage)
-	second := newOfflineClient(t, func(fixture string) string {
+	ownedStorage := &closeTrackingStorage{}
+	sharedStorage := &closeTrackingStorage{}
+	owned := newOfflineClient(t, nil, ownedStorage)
+	shared := newOfflineClient(t, nil, sharedStorage)
+	t.Cleanup(func() {
+		if err := shared.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	other := newOfflineClient(t, func(fixture string) string {
 		return strings.ReplaceAll(fixture, `"value": "basic"`, `"value": "other-environment"`)
 	})
-	clientA, apiA, providerA := registerOfflineProvider(t, first)
-	clientB, _, _ := registerOfflineProvider(t, second)
+	clientA, apiA, providerA := registerOfflineProvider(t, owned)
+	_, apiShared, providerShared := registerOfflineProvider(t, shared, featbit.WithoutClosingClient())
+	clientB, _, _ := registerOfflineProvider(t, other)
 	ec := openfeature.NewEvaluationContext("same-workload", nil)
 	for _, tc := range []struct {
 		client *openfeature.Client
@@ -337,17 +342,23 @@ func TestOfflineProviderIsolationAndClientOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	providerA.Shutdown()
-	providerA.Shutdown()
-	if got := storage.closeCalls.Load(); got != 0 {
-		t.Fatalf("provider closed application-owned SDK storage %d times", got)
+	if got := ownedStorage.closeCalls.Load(); got != 1 {
+		t.Fatalf("API shutdown closed provider-owned SDK storage %d times; want 1", got)
+	}
+	if err := apiShared.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	providerShared.Shutdown()
+	if got := sharedStorage.closeCalls.Load(); got != 0 {
+		t.Fatalf("provider closed shared SDK storage %d times", got)
 	}
 	user, err := interfaces.NewUserBuilder("same-workload").Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, _, err := first.Variation("string", user, "fallback")
+	value, _, err := shared.Variation("string", user, "fallback")
 	if err != nil || value != "basic" {
-		t.Fatalf("provider shutdown closed application-owned client: value=%q, err=%v", value, err)
+		t.Fatalf("provider shutdown closed shared client: value=%q, err=%v", value, err)
 	}
 	value, err = clientB.StringValue(t.Context(), "string", "fallback", ec)
 	if err != nil || value != "other-environment" {

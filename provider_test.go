@@ -7,15 +7,19 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	sdk "github.com/featbit/featbit-go-sdk/v2"
 	"github.com/featbit/featbit-go-sdk/v2/interfaces"
 	"github.com/open-feature/go-sdk/openfeature"
+	"github.com/open-feature/go-sdk/openfeature/isolated"
 )
 
 type stubClient struct {
 	initialized bool
+	status      interfaces.DataUpdateStatusProvider
 	text        string
 	number      float64
 	object      any
@@ -23,9 +27,18 @@ type stubClient struct {
 	err         error
 	calls       int
 	jsonDefault any
+	closeCalls  int
+}
+
+func (s *stubClient) Close() error {
+	s.closeCalls++
+	return nil
 }
 
 func (s *stubClient) IsInitialized() bool { return s.initialized }
+func (s *stubClient) GetDataUpdateStatusProvider() interfaces.DataUpdateStatusProvider {
+	return s.status
+}
 func (s *stubClient) Variation(string, interfaces.FBUser, string) (string, interfaces.EvalDetail, error) {
 	s.calls++
 	return s.text, s.detail, s.err
@@ -38,6 +51,63 @@ func (s *stubClient) JsonVariation(_ string, _ interfaces.FBUser, fallback any) 
 	s.calls++
 	s.jsonDefault = fallback
 	return s.object, s.detail, s.err
+}
+
+type stubStatusProvider struct {
+	mu      sync.Mutex
+	state   interfaces.State
+	changed chan struct{}
+}
+
+func newStubStatusProvider(state interfaces.StateType) *stubStatusProvider {
+	return &stubStatusProvider{state: interfaces.State{StateType: state}, changed: make(chan struct{})}
+}
+
+func (s *stubStatusProvider) GetCurrentState() interfaces.State {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state
+}
+
+func (s *stubStatusProvider) WaitFor(target interfaces.StateType, timeout time.Duration) bool {
+	var timer *time.Timer
+	var timeoutC <-chan time.Time
+	if timeout > 0 {
+		timer = time.NewTimer(timeout)
+		timeoutC = timer.C
+		defer timer.Stop()
+	}
+	for {
+		s.mu.Lock()
+		state := s.state.StateType
+		changed := s.changed
+		s.mu.Unlock()
+		if state == target {
+			return true
+		}
+		if state == interfaces.OFF {
+			return false
+		}
+		select {
+		case <-changed:
+		case <-timeoutC:
+			return false
+		}
+	}
+}
+
+func (s *stubStatusProvider) WaitForOKState(timeout time.Duration) bool {
+	return s.WaitFor(interfaces.OK, timeout)
+}
+
+func (s *stubStatusProvider) Close() error { return nil }
+
+func (s *stubStatusProvider) setState(state interfaces.StateType) {
+	s.mu.Lock()
+	s.state = interfaces.State{StateType: state}
+	close(s.changed)
+	s.changed = make(chan struct{})
+	s.mu.Unlock()
 }
 
 func TestProviderInitialization(t *testing.T) {
@@ -56,9 +126,119 @@ func TestProviderInitialization(t *testing.T) {
 		p.Shutdown()
 		p.Shutdown()
 	}
-	ready := &Provider{client: &stubClient{initialized: true}}
+	ready := newProvider(&stubClient{
+		initialized: true,
+		status:      newStubStatusProvider(interfaces.OK),
+	}, time.Second)
 	if err := ready.Init(openfeature.EvaluationContext{}); err != nil {
 		t.Fatal(err)
+	}
+	ready.Shutdown()
+}
+
+func TestProviderShutdownClosesClient(t *testing.T) {
+	owned := &stubClient{}
+	p := newProvider(owned, time.Second)
+	p.Shutdown()
+	p.Shutdown()
+	if owned.closeCalls != 1 {
+		t.Fatalf("owned client closed %d times; want 1", owned.closeCalls)
+	}
+
+	shared := &stubClient{}
+	p = newProvider(shared, time.Second)
+	WithoutClosingClient()(p)
+	p.Shutdown()
+	if shared.closeCalls != 0 {
+		t.Fatalf("shared client closed %d times; want 0", shared.closeCalls)
+	}
+}
+
+func TestProviderStatusMapping(t *testing.T) {
+	status := newStubStatusProvider(interfaces.INITIALIZING)
+	p := newProvider(&stubClient{status: status}, 10*time.Millisecond)
+	err := p.Init(openfeature.EvaluationContext{})
+	var initErr *openfeature.ProviderInitError
+	if !errors.As(err, &initErr) || initErr.ErrorCode != openfeature.ProviderNotReadyCode {
+		t.Fatalf("initializing client: got %v, want PROVIDER_NOT_READY", err)
+	}
+
+	for _, tc := range []struct {
+		state interfaces.StateType
+		event openfeature.EventType
+		code  openfeature.ErrorCode
+	}{
+		{interfaces.OK, openfeature.ProviderReady, ""},
+		{interfaces.INTERRUPTED, openfeature.ProviderStale, ""},
+		{interfaces.OK, openfeature.ProviderReady, ""},
+		{interfaces.OFF, openfeature.ProviderError, openfeature.ProviderFatalCode},
+	} {
+		status.setState(tc.state)
+		select {
+		case event := <-p.EventChannel():
+			if event.EventType != tc.event || event.ProviderName != "featbit" || event.ErrorCode != tc.code {
+				t.Fatalf("event=%+v, want type %s and code %s", event, tc.event, tc.code)
+			}
+			if tc.state == interfaces.INTERRUPTED && event.Message != "FeatBit data source is interrupted" {
+				t.Fatalf("stale event exposed an unexpected message: %q", event.Message)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for %s event", tc.event)
+		}
+	}
+
+	p.Shutdown()
+	if _, ok := <-p.EventChannel(); ok {
+		t.Fatal("event channel remained open after shutdown")
+	}
+}
+
+func TestProviderInitializationFatalStatus(t *testing.T) {
+	p := newProvider(&stubClient{status: newStubStatusProvider(interfaces.OFF)}, time.Second)
+	err := p.Init(openfeature.EvaluationContext{})
+	var initErr *openfeature.ProviderInitError
+	if !errors.As(err, &initErr) || initErr.ErrorCode != openfeature.ProviderFatalCode {
+		t.Fatalf("stopped client: got %v, want PROVIDER_FATAL", err)
+	}
+	p.Shutdown()
+}
+
+func TestOpenFeatureProviderStatusTracksFeatBit(t *testing.T) {
+	status := newStubStatusProvider(interfaces.OK)
+	p := newProvider(&stubClient{status: status}, time.Second)
+	api := isolated.NewAPI()
+	t.Cleanup(func() {
+		if err := api.Shutdown(t.Context()); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := api.SetProviderAndWait(t.Context(), p); err != nil {
+		t.Fatal(err)
+	}
+	client := api.NewClient()
+	requireProviderState(t, client, openfeature.ReadyState)
+
+	for _, tc := range []struct {
+		sdkState         interfaces.StateType
+		openFeatureState openfeature.State
+	}{
+		{interfaces.INTERRUPTED, openfeature.StaleState},
+		{interfaces.OK, openfeature.ReadyState},
+		{interfaces.OFF, openfeature.FatalState},
+	} {
+		status.setState(tc.sdkState)
+		requireProviderState(t, client, tc.openFeatureState)
+	}
+}
+
+func requireProviderState(t *testing.T, client *openfeature.Client, want openfeature.State) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for client.State() != want && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := client.State(); got != want {
+		t.Fatalf("provider state=%s, want %s", got, want)
 	}
 }
 
@@ -112,7 +292,7 @@ func TestEvaluationFailuresPreserveDefaults(t *testing.T) {
 		} {
 			t.Run(evaluation.name+"/"+failure.name, func(t *testing.T) {
 				client := &stubClient{initialized: true, text: "unexpected", number: 99, object: json.RawMessage(`{"unexpected":true}`)}
-				p := &Provider{client: client}
+				p := newProvider(client, providerInitTimeout)
 				ctx := context.Background()
 				ec := openfeature.FlattenedContext{openfeature.TargetingKey: "user"}
 				wantCalls := 0
@@ -158,7 +338,7 @@ func TestEvaluationFailuresPreserveDefaults(t *testing.T) {
 func TestInvalidFloatResults(t *testing.T) {
 	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		client := &stubClient{initialized: true, number: value}
-		p := &Provider{client: client}
+		p := newProvider(client, providerInitTimeout)
 		r := p.FloatEvaluation(t.Context(), "flag", 2.5, openfeature.FlattenedContext{openfeature.TargetingKey: "user"})
 		if r.Value != 2.5 || r.ResolutionDetail().ErrorCode != openfeature.TypeMismatchCode {
 			t.Fatalf("non-finite result: %+v", r)
@@ -199,7 +379,7 @@ func checkSingleEvaluation[T any](t *testing.T, client *stubClient, evaluate fun
 	t.Helper()
 	client.initialized = true
 	client.detail.Reason = sdk.ReasonTargetMatch
-	result := evaluate(&Provider{client: client})
+	result := evaluate(newProvider(client, providerInitTimeout))
 	if result.Error() != nil || result.Reason != openfeature.TargetingMatchReason || !reflect.DeepEqual(result.Value, want) {
 		t.Fatalf("result=%+v, want value=%#v and TARGETING_MATCH", result, want)
 	}
@@ -212,7 +392,7 @@ func TestBooleanEvaluationRejectsCoercion(t *testing.T) {
 	for _, raw := range []string{"1", "0", "TRUE", "False", "null", ""} {
 		t.Run(raw, func(t *testing.T) {
 			client := &stubClient{initialized: true, text: raw}
-			p := &Provider{client: client}
+			p := newProvider(client, providerInitTimeout)
 			result := p.BooleanEvaluation(t.Context(), "flag", true, openfeature.FlattenedContext{openfeature.TargetingKey: "user"})
 			if !result.Value || result.ResolutionDetail().ErrorCode != openfeature.TypeMismatchCode || client.calls != 1 {
 				t.Fatalf("result=%+v, SDK calls=%d; want default and TYPE_MISMATCH", result, client.calls)
@@ -238,7 +418,7 @@ func TestJSONConversion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &stubClient{initialized: true, object: tc.value}
-			p := &Provider{client: client}
+			p := newProvider(client, providerInitTimeout)
 			r := p.ObjectEvaluation(t.Context(), "flag", defaultValue, ec)
 			if r.Value != defaultValue || defaultValue.Name != "unchanged" || r.ResolutionDetail().ErrorCode != tc.code {
 				t.Fatalf("result=%+v, want original default and %s", r, tc.code)
