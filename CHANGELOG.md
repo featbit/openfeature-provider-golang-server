@@ -1,12 +1,17 @@
 # Changelog
 
-## v2.1.2 - 2026-11-08
+## v2.1.2 - 2026-11-10
 
 ### Changes
 
 - Wait for FeatBit SDK readiness during provider initialization and map runtime data-source status changes to OpenFeature provider status events.
 - Provider shutdown now closes the FeatBit client once, matching the Python provider, so `api.Shutdown` releases every registered provider and its client. Use `WithoutClosingClient()` for clients shared with other code. **Behavior change:** remove separate `fbClient.Close()` calls unless using that option.
 - Replace the flag polling demo with an interactive checkout shipping quote controlled by a FeatBit flag.
+
+### Compatibility
+
+- Require Go 1.26 or later, FeatBit Go SDK v2.1.1, and OpenFeature Go SDK v1.19.0.
+- Continue using the `github.com/featbit/openfeature-provider-golang-server/v2` module and import path.
 
 ## v2.1.1 - 2026-11-04
 

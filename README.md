@@ -7,7 +7,7 @@ Use [FeatBit](https://www.featbit.co/) feature flags in Go server applications w
 Requires Go 1.26 or later and FeatBit Go SDK v2.1.1 (`github.com/featbit/featbit-go-sdk/v2`).
 
 ```sh
-go get github.com/featbit/openfeature-provider-golang-server/v2@v2.1.1
+go get github.com/featbit/openfeature-provider-golang-server/v2@v2.1.2
 ```
 
 ## Quick start
