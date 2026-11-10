@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.2 - 2026-11-08
+
+### Changes
+
+- Wait for FeatBit SDK readiness during provider initialization and map runtime data-source status changes to OpenFeature provider status events.
+- Provider shutdown now closes the FeatBit client once, matching the Python provider, so `api.Shutdown` releases every registered provider and its client. Use `WithoutClosingClient()` for clients shared with other code. **Behavior change:** remove separate `fbClient.Close()` calls unless using that option.
+- Replace the flag polling demo with an interactive checkout shipping quote controlled by a FeatBit flag.
+
 ## v2.1.1 - 2026-11-04
 
 ### Changes

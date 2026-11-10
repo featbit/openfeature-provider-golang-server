@@ -45,10 +45,10 @@ func run() (err error) {
 		os.Getenv("FEATBIT_EVENT_URL"),
 		featbitsdk.FBConfig{StartWait: 10 * time.Second, LogLevel: featbitsdk.WARN},
 	)
-	if fbClient != nil {
-		defer func() { err = errors.Join(err, fbClient.Close()) }()
-	}
 	if err != nil {
+		if fbClient != nil {
+			err = errors.Join(err, fbClient.Close())
+		}
 		return err
 	}
 
@@ -57,6 +57,7 @@ func run() (err error) {
 		return err
 	}
 	api := isolated.NewAPI()
+	// OpenFeature shutdown also closes the FeatBit client.
 	defer func() { err = errors.Join(err, api.Shutdown(context.Background())) }()
 	if err = api.SetProviderAndWait(context.Background(), provider); err != nil {
 		return err
@@ -100,9 +101,9 @@ Replace the example flag keys with flags from your environment. Each call return
 
 Create one FeatBit client and provider per environment at startup, then share the OpenFeature client with handlers and services. Supply request and tenant attributes on each evaluation. Use separate isolated API instances or OpenFeature domains for different environments.
 
-`NewProvider` returns an error for a nil client. Registration fails if the FeatBit client is not ready. The quick start exits on startup failure; choose a readiness policy appropriate for your application.
+`NewProvider` returns an error for a nil client. Provider initialization waits up to 15 seconds for the FeatBit data source to become operational. A timeout reports `PROVIDER_NOT_READY`; a permanently stopped SDK reports `PROVIDER_FATAL`. After initialization, the provider reads `GetDataUpdateStatusProvider().GetCurrentState()` every 100 ms and maps SDK `INTERRUPTED`, `OK`, and `OFF` transitions to OpenFeature `STALE`, `READY`, and `FATAL` provider states.
 
-Drain requests before shutting down OpenFeature, then call `fbClient.Close()`. OpenFeature shutdown does not close the application-owned FeatBit client.
+The quick start exits on startup failure; choose a readiness policy appropriate for your application. Drain requests before shutting down OpenFeature. Provider shutdown, triggered by `api.Shutdown` or by replacing the provider, stops the status monitor and closes the FeatBit client exactly once, so do not close the client separately. If the client is shared with other providers or application code, create the provider with `featbitprovider.NewProvider(fbClient, featbitprovider.WithoutClosingClient())` and close the client yourself after OpenFeature shuts down.
 
 See the [HTTP server example](examples/basic/) for configuration, request-scoped evaluation, defaults, and graceful shutdown.
 

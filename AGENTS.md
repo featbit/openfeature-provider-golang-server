@@ -27,12 +27,12 @@
 
 - Use one Go module and one public provider package; keep helpers unexported.
 - Start with `provider.go`, `context.go`, `resolution.go`, adjacent `*_test.go` files, and `examples/basic/`.
-- Expose `NewProvider(client *featbit.FBClient)`; reject nil clients and document constructor errors.
-- Accept an application-owned client. Applications configure FeatBit endpoints, credentials, and startup timeout through the FeatBit SDK.
+- Expose `NewProvider(client *featbit.FBClient, opts ...Option)`; reject nil clients and document constructor errors.
+- The provider owns the injected client by default. Applications configure FeatBit endpoints, credentials, and startup timeout through the FeatBit SDK.
 - Reuse one client per FeatBit environment; never construct a client during evaluation.
 - Implement `openfeature.FeatureProvider` and `openfeature.StateHandler`, with compile-time interface assertions.
-- `Init` must verify client readiness and return an initialization error when unavailable.
-- `Shutdown` must be idempotent and release adapter resources; the application remains responsible for `FBClient.Close()`.
+- `Init` must wait for FeatBit readiness, distinguishing initialization timeout from permanent shutdown; map runtime FeatBit `OK`, `INTERRUPTED`, and `OFF` states to OpenFeature ready, stale, and fatal events.
+- `Shutdown` must be idempotent, stop adapter resources, and close the FeatBit client exactly once; `WithoutClosingClient()` leaves a shared client for the application to close. OpenFeature API shutdown therefore closes every registered provider and its client.
 - Return stable provider metadata named `featbit`; return an empty hook list unless provider hooks are needed.
 - Use a small private client interface for test doubles; avoid a general abstraction framework.
 - Support concurrent evaluations without mutating caller contexts or package-level SDK configuration.
@@ -45,7 +45,7 @@
 - Keep evaluation local through the FeatBit SDK; add no network calls to the request path.
 - Let applications choose startup failure and readiness policies, including whether to serve defaults when initialization fails.
 - Keep signal handling, listeners, and process termination in the application.
-- Drain in-flight requests before provider shutdown and client closure; close each application-owned FeatBit client once.
+- Drain in-flight requests before OpenFeature shutdown; do not close a provider-owned FeatBit client separately.
 - Isolate multiple FeatBit environments with separate clients and providers, registered through OpenFeature domains or isolated API instances.
 
 ## Evaluation Contract
@@ -66,6 +66,7 @@
 - Preserve the caller's default value on every evaluation error and populate the OpenFeature resolution error.
 - Map FeatBit not-ready, missing-flag, and wrong-type results to `PROVIDER_NOT_READY`, `FLAG_NOT_FOUND`, and `TYPE_MISMATCH`; use `GENERAL` for unclassified failures.
 - Inspect both the SDK error and evaluation detail; a fallback value alone does not indicate success.
+- FeatBit SDK v2.1.1 exposes `DataUpdateStatusProvider` state snapshots and waits but no status listener; use its status API for initialization and runtime status mapping; do not close the status provider directly, because `FBClient.Close()` closes it.
 - Map known success reasons explicitly; use `UNKNOWN` when the SDK provides insufficient detail.
 - Populate `Variant` only from an actual variation identifier, never from the evaluated value.
 - Validate raw boolean and integer variations; avoid the SDK's numeric-to-boolean coercion and float-to-int truncation.

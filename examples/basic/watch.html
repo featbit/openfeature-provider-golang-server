@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FeatBit live flag test</title>
+  <title>Checkout shipping quote</title>
   <style>
     :root { font-family: system-ui, sans-serif; color: #17212b; background: #f3f5f7; color-scheme: light; }
     * { box-sizing: border-box; }
@@ -13,100 +13,106 @@
     h1 { margin: 0 0 10px; font-size: 28px; letter-spacing: -.6px; }
     p { color: #586573; line-height: 1.6; margin: 0; }
     .card { background: white; padding: 28px; border: 1px solid #dce2e8; border-radius: 16px; }
-    .top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-    #flag { font: 600 16px ui-monospace, monospace; overflow-wrap: anywhere; }
-    #status { font-size: 13px; color: #586573; background: #edf0f3; padding: 6px 10px; border-radius: 6px; }
-    #value { font: 700 clamp(64px, 15vw, 100px) ui-monospace, monospace; margin: 28px 0 16px; letter-spacing: -5px; }
-    .card[data-state="true"] #value { color: #167343; }
-    .card[data-state="false"] #value { color: #465567; }
-    .card[data-state="error"] #value, .card[data-state="error"] #status { color: #9b4910; }
-    #notice { min-height: 26px; margin-bottom: 20px; }
-    dl { display: grid; grid-template-columns: 140px 1fr; gap: 10px; font-size: 14px; margin: 0; }
+    h1 { margin: 0 0 10px; }
+    .card { margin-bottom: 18px; }
+    form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 14px; }
+    label { display: grid; gap: 7px; color: #586573; font-size: 14px; }
+    input, button { min-height: 42px; border: 1px solid #c9d2dc; border-radius: 7px; padding: 9px 11px; font: inherit; }
+    input { width: 100%; color: #17212b; background: white; }
+    button { color: white; background: #2457a7; border-color: #2457a7; cursor: pointer; font-weight: 600; }
+    button:disabled { opacity: .65; cursor: wait; }
+    #status { margin: 0 0 20px; color: #586573; }
+    #status[data-state="error"] { color: #9b4910; }
+    dl { display: grid; grid-template-columns: 1fr auto; gap: 13px; font-size: 15px; margin: 0; }
     dt { color: #586573; }
-    dd { margin: 0; overflow-wrap: anywhere; }
-    h2 { font-size: 16px; margin: 30px 0 12px; }
-    ol { list-style: none; padding: 0; margin: 0; }
-    li { padding: 12px 0; border-bottom: 1px solid #dce2e8; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
-    li time { color: #586573; margin-right: 12px; font-variant-numeric: tabular-nums; }
-    #empty { font-size: 14px; }
-    footer { font-size: 12px; color: #586573; margin-top: 22px; }
-    @media (max-width: 480px) { body { padding: 28px 16px; } .card { padding: 22px; } dl { grid-template-columns: 110px 1fr; } }
+    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+    dd.total { color: #167343; font-size: 24px; font-weight: 700; }
+    #promo { margin: 0 0 22px; color: #167343; font-weight: 600; }
+    #promo[data-applied="false"] { color: #586573; font-weight: 400; }
+    .hint { margin-top: 18px; font-size: 13px; }
+    @media (max-width: 560px) { body { padding: 28px 16px; } .card { padding: 22px; } form { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>FeatBit live flag test</h1>
-      <p>Change this flag in the FeatBit UI and save. This page evaluates it every second.</p>
+      <h1>Checkout shipping quote</h1>
+      <p>See how a FeatBit flag changes a checkout decision: qualifying carts can receive free shipping.</p>
     </header>
-    <section class="card" id="card" data-state="waiting" aria-label="Current evaluation">
-      <div class="top"><span id="flag">Waiting for flag…</span><span id="status" role="status">Connecting</span></div>
-      <div id="value" aria-live="polite">—</div>
-      <p id="notice">Waiting for the first evaluation.</p>
+    <section class="card" aria-label="Checkout inputs">
+      <form id="quote-form">
+        <label>Demo customer ID
+          <input name="customerId" value="demo-customer-123" maxlength="128" required autocomplete="off">
+        </label>
+        <label>Cart subtotal (USD)
+          <input name="subtotal" type="number" value="65.00" min="0" max="1000000" step="0.01" required>
+        </label>
+        <button id="submit" type="submit">Get quote</button>
+      </form>
+      <p class="hint">For a real service, use the customer ID from authenticated request context.</p>
+    </section>
+    <section class="card" aria-label="Checkout quote">
+      <p id="status" role="status">Enter a customer and subtotal to evaluate the checkout flag.</p>
+      <p id="promo" data-applied="false">No quote yet.</p>
       <dl>
-        <dt>Reason</dt><dd id="reason">—</dd>
-        <dt>Last evaluated</dt><dd id="updated">—</dd>
+        <dt>Flag</dt><dd id="flag">—</dd>
+        <dt>Evaluation reason</dt><dd id="reason">—</dd>
+        <dt>Cart subtotal</dt><dd id="subtotal">—</dd>
+        <dt>Shipping</dt><dd id="shipping">—</dd>
+        <dt>Total</dt><dd class="total" id="total">—</dd>
       </dl>
     </section>
-    <h2>Recent changes</h2>
-    <p id="empty">Value, reason, and error changes will appear here.</p>
-    <ol id="history" aria-label="Recent flag changes"></ol>
-    <footer>Shows the latest 15 changes. Evaluation errors display the default value with an error status.</footer>
   </main>
   <script>
     const byId = (id) => document.getElementById(id);
-    const card = byId('card');
-    let previous = '';
+    const form = byId('quote-form');
 
-    function record(signature, message, now) {
-      if (signature === previous) return;
-      previous = signature;
-      byId('empty').hidden = true;
-      const item = document.createElement('li');
-      const time = document.createElement('time');
-      time.dateTime = now.toISOString();
-      time.textContent = now.toLocaleTimeString();
-      item.append(time, document.createTextNode(message));
-      const history = byId('history');
-      history.prepend(item);
-      while (history.children.length > 15) history.lastElementChild.remove();
+    function formatMoney(cents) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
     }
 
-    async function refresh() {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const customerId = form.elements.customerId.value.trim();
+      const subtotal = Number(form.elements.subtotal.value);
+      if (!Number.isFinite(subtotal) || subtotal < 0 || subtotal > 1000000) return;
+
+      const button = byId('submit');
+      button.disabled = true;
+      byId('status').dataset.state = '';
+      byId('status').textContent = 'Calculating checkout quote…';
       try {
-        const response = await fetch('/feature', { cache: 'no-store', signal: controller.signal });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const response = await fetch('/checkout/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerId, subtotalCents: Math.round(subtotal * 100) }),
+        });
         const result = await response.json();
-        if (typeof result.flagKey !== 'string' || typeof result.enabled !== 'boolean' || typeof result.reason !== 'string') {
-          throw new Error('Unexpected response');
+        if (!response.ok) throw new Error(result.error || 'Could not calculate quote');
+        if (typeof result.promoApplied !== 'boolean' || !Number.isSafeInteger(result.totalCents)) {
+          throw new Error('Unexpected quote response');
         }
-        const now = new Date();
         const error = result.errorCode || '';
-        card.dataset.state = error ? 'error' : String(result.enabled);
+        byId('status').dataset.state = error ? 'error' : '';
+        byId('status').textContent = error
+          ? 'Flag evaluation failed; the standard shipping fallback was used (' + error + ').'
+          : 'Quote calculated successfully.';
+        byId('promo').dataset.applied = String(result.promoApplied);
+        byId('promo').textContent = result.promoApplied
+          ? 'Free shipping applied — the flag is enabled and the cart meets the $50 minimum.'
+          : 'Standard shipping — the flag is off or the cart is below the $50 minimum.';
         byId('flag').textContent = result.flagKey;
-        byId('value').textContent = String(result.enabled);
-        byId('status').textContent = error ? 'Evaluation error · ' + error : 'Receiving evaluations';
-        byId('notice').textContent = error ? 'This is the default value because evaluation failed.' : 'Save your flag changes in FeatBit to see the result here.';
         byId('reason').textContent = result.reason || 'UNKNOWN';
-        byId('updated').textContent = now.toLocaleTimeString();
-        record(JSON.stringify([result.flagKey, result.enabled, result.reason, error]),
-          String(result.enabled) + (error ? ' (default) · ' + error : '') + ' · ' + (result.reason || 'UNKNOWN'), now);
+        byId('subtotal').textContent = formatMoney(result.subtotalCents);
+        byId('shipping').textContent = formatMoney(result.shippingCents);
+        byId('total').textContent = formatMoney(result.totalCents);
       } catch (error) {
-        const message = error.name === 'AbortError' ? 'Request timed out' : error.message;
-        card.dataset.state = 'error';
-        byId('value').textContent = '—';
-        byId('status').textContent = 'Connection error';
-        byId('notice').textContent = message + '. Retrying automatically.';
-        byId('reason').textContent = 'Unavailable';
-        record('connection:' + message, 'Connection error · ' + message, new Date());
+        byId('status').dataset.state = 'error';
+        byId('status').textContent = 'Could not calculate quote: ' + error.message;
       } finally {
-        clearTimeout(timeout);
-        setTimeout(refresh, 1000);
+        button.disabled = false;
       }
-    }
-    refresh();
+    });
   </script>
 </body>
 </html>

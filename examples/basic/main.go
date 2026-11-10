@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,7 +33,7 @@ func main() {
 
 func run() (err error) {
 	for _, name := range []string{
-		"FEATBIT_ENV_SECRET", "FEATBIT_STREAMING_URL", "FEATBIT_EVENT_URL", "SERVICE_TARGETING_KEY",
+		"FEATBIT_ENV_SECRET", "FEATBIT_STREAMING_URL", "FEATBIT_EVENT_URL",
 	} {
 		if os.Getenv(name) == "" {
 			return fmt.Errorf("%s is required", name)
@@ -44,11 +46,11 @@ func run() (err error) {
 		os.Getenv("FEATBIT_EVENT_URL"),
 		featbitsdk.FBConfig{StartWait: 10 * time.Second, LogLevel: featbitsdk.WARN},
 	)
-	// The SDK may return a client even when initialization fails.
-	if fbClient != nil {
-		defer func() { err = errors.Join(err, fbClient.Close()) }()
-	}
 	if err != nil {
+		// The SDK may return a client even when initialization fails.
+		if fbClient != nil {
+			err = errors.Join(err, fbClient.Close())
+		}
 		return err
 	}
 	provider, err := featbitprovider.NewProvider(fbClient)
@@ -57,6 +59,7 @@ func run() (err error) {
 	}
 
 	api := isolated.NewAPI()
+	// OpenFeature shutdown also closes the FeatBit client.
 	defer func() { err = errors.Join(err, api.Shutdown(context.Background())) }()
 	// This application requires ready flag data before accepting requests.
 	if err := api.SetProviderAndWait(context.Background(), provider); err != nil {
@@ -64,26 +67,22 @@ func run() (err error) {
 	}
 
 	app := &application{
-		flags:        api.NewClient(),
-		targetingKey: os.Getenv("SERVICE_TARGETING_KEY"),
-		flagKey:      os.Getenv("FEATBIT_FLAG_KEY"),
+		flags:   api.NewClient(),
+		flagKey: os.Getenv("FEATBIT_FLAG_KEY"),
 	}
 	if app.flagKey == "" {
-		app.flagKey = "my-feature"
+		app.flagKey = "checkout-free-shipping"
 	}
-	addr := os.Getenv("LISTEN_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
-	}
+	addr := listenAddr()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		if _, err := w.Write(watchPage); err != nil {
-			log.Print("Could not write live view")
+			log.Print("Could not write checkout page")
 		}
 	})
-	mux.HandleFunc("GET /feature", app.feature)
+	mux.HandleFunc("POST /checkout/quote", app.checkoutQuote)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -97,7 +96,7 @@ func run() (err error) {
 	defer stop()
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()
-	log.Printf("Live view: http://%s/; GET /feature evaluates %s", addr, app.flagKey)
+	log.Printf("Checkout demo: http://%s/; POST /checkout/quote evaluates %s", addr, app.flagKey)
 
 	var serveErr error
 	select {
@@ -119,31 +118,94 @@ func run() (err error) {
 	return nil
 }
 
-type application struct {
-	flags        *openfeature.Client
-	targetingKey string
-	flagKey      string
+func listenAddr() string {
+	if addr := os.Getenv("LISTEN_ADDR"); addr != "" {
+		return addr
+	}
+	return "127.0.0.1:1234"
 }
 
-func (app *application) feature(w http.ResponseWriter, r *http.Request) {
-	// For per-user targeting, use the identity established by authentication middleware.
-	evaluationContext := openfeature.NewEvaluationContext(app.targetingKey, map[string]any{
-		"method": r.Method,
-		"route":  "/feature",
+type application struct {
+	flags   *openfeature.Client
+	flagKey string
+}
+
+const (
+	freeShippingThresholdCents int64 = 5000
+	standardShippingCents      int64 = 599
+	maxSubtotalCents           int64 = 100_000_000
+)
+
+type quoteRequest struct {
+	CustomerID    string `json:"customerId"`
+	SubtotalCents *int64 `json:"subtotalCents"`
+}
+
+type quoteResponse struct {
+	FlagKey       string                `json:"flagKey"`
+	PromoApplied  bool                  `json:"promoApplied"`
+	SubtotalCents int64                 `json:"subtotalCents"`
+	ShippingCents int64                 `json:"shippingCents"`
+	TotalCents    int64                 `json:"totalCents"`
+	Reason        openfeature.Reason    `json:"reason"`
+	ErrorCode     openfeature.ErrorCode `json:"errorCode,omitempty"`
+}
+
+func (app *application) checkoutQuote(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request quoteRequest
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid checkout request"})
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "checkout request must contain one JSON object"})
+		return
+	}
+	request.CustomerID = strings.TrimSpace(request.CustomerID)
+	if request.CustomerID == "" || len(request.CustomerID) > 128 || request.SubtotalCents == nil ||
+		*request.SubtotalCents < 0 || *request.SubtotalCents > maxSubtotalCents {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "customerId and a valid subtotalCents are required"})
+		return
+	}
+	subtotalCents := *request.SubtotalCents
+
+	evaluationContext := openfeature.NewEvaluationContext(request.CustomerID, map[string]any{
+		"subtotalCents": subtotalCents,
 	})
 	details, err := app.flags.BooleanValueDetails(r.Context(), app.flagKey, false, evaluationContext)
 	if err != nil {
-		log.Print("Flag evaluation failed; using the default value")
+		log.Print("Checkout flag evaluation failed; using standard shipping")
 	}
+
+	response := calculateCheckoutQuote(err == nil && details.Value, subtotalCents)
+	response.FlagKey = app.flagKey
+	response.Reason = details.Reason
+	response.ErrorCode = details.ErrorCode
+	writeJSON(w, http.StatusOK, response)
+}
+
+func calculateCheckoutQuote(promoEnabled bool, subtotalCents int64) quoteResponse {
+	promoApplied := promoEnabled && subtotalCents >= freeShippingThresholdCents
+	shippingCents := standardShippingCents
+	if promoApplied {
+		shippingCents = 0
+	}
+	return quoteResponse{
+		PromoApplied:  promoApplied,
+		SubtotalCents: subtotalCents,
+		ShippingCents: shippingCents,
+		TotalCents:    subtotalCents + shippingCents,
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	response := struct {
-		FlagKey   string                `json:"flagKey"`
-		Enabled   bool                  `json:"enabled"`
-		Reason    openfeature.Reason    `json:"reason"`
-		ErrorCode openfeature.ErrorCode `json:"errorCode,omitempty"`
-	}{app.flagKey, details.Value, details.Reason, details.ErrorCode}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
 		log.Print("Could not write response")
 	}
 }
